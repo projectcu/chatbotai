@@ -41,7 +41,6 @@ const connectDB = async () => {
     });
     console.log('MongoDB connected successfully');
 
-    // Seed intents in development mode
     if (process.env.NODE_ENV === 'development') {
       const { seedIntents } = require('./utils/seedIntents');
       await seedIntents();
@@ -61,7 +60,7 @@ app.use('/api/analytics', authMiddleware, analyticsRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/agents', authMiddleware, agentRoutes);
 
-// Health check endpoint
+// Health check
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'healthy',
@@ -70,14 +69,13 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// WebSocket connection handler
+// WebSocket
 wss.on('connection', (ws) => {
   console.log('New WebSocket connection established');
 
   ws.on('message', async (message) => {
     try {
       const data = JSON.parse(message);
-      // Handle WebSocket messages (real-time chat)
       console.log('WebSocket message received:', data);
     } catch (error) {
       console.error('WebSocket message error:', error);
@@ -94,7 +92,7 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Error handling middleware
+// Error handling
 app.use(errorHandler);
 
 // 404 handler
@@ -106,9 +104,10 @@ app.use((req, res) => {
   });
 });
 
-// Start server
+// ✅ FIXED FOR AZURE (IMPORTANT CHANGE HERE)
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
+
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Chatbot Backend Server running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
 });
