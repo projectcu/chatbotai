@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY_NAME: chatbotregistry
-  RESOURCE_GROUP: chatbot-rg
+  REGISTRY_NAME: chatbotacrcu
+  RESOURCE_GROUP: chatbot_project
   BACKEND_NAME: chatbot-backend
   FRONTEND_NAME: chatbot-frontend
   ADMIN_NAME: chatbot-admin
