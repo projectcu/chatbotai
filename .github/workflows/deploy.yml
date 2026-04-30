@@ -49,7 +49,7 @@ jobs:
 
       - name: Build and push Admin image
         run: |
-          docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.ADMIN_NAME }}:${{ github.sha }} -f azure-deployment/Dockerfile.admin ./admin-panel
+          docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.ADMIN_NAME }}:${{ github.sha }} -f azure-deployment/Dockerfile.admin .
           docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.ADMIN_NAME }}:${{ github.sha }}
 
       - name: Deploy Backend
