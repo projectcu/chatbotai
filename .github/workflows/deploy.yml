@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+permissions:
+  contents: read
+  id-token: write
+
 env:
   REGISTRY_NAME: chatbotacrcu
   RESOURCE_GROUP: chatbot_project
@@ -16,17 +20,11 @@ env:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ==========================================
-      # LOGIN TO AZURE
-      # ==========================================
       - name: Azure login
         uses: azure/login@v2
         with:
@@ -34,130 +32,54 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # ==========================================
-      # LOGIN TO ACR
-      # ==========================================
-      - name: Azure Container Registry login
-        run: |
-          az acr login --name ${{ env.REGISTRY_NAME }}
+      - name: Login to Azure Container Registry
+        run: az acr login --name ${{ env.REGISTRY_NAME }}
 
-      # ==========================================
-      # BUILD BACKEND IMAGE
-      # ==========================================
-      - name: Build Backend image
+      - name: Build and push Backend image
         run: |
-          docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.BACKEND_NAME }}:${{ github.sha }} \
-            -f azure-deployment/Dockerfile.backend ./backend
-          
-          docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.BACKEND_NAME }}:latest \
-            -f azure-deployment/Dockerfile.backend ./backend
-
-      - name: Push Backend image
-        run: |
+          docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.BACKEND_NAME }}:${{ github.sha }} -f azure-deployment/Dockerfile.backend ./backend
           docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.BACKEND_NAME }}:${{ github.sha }}
-          docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.BACKEND_NAME }}:latest
 
-      # ==========================================
-      # BUILD FRONTEND IMAGE
-      # ==========================================
-      - name: Build Frontend image
+      - name: Build and push Frontend image
         run: |
-          docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.FRONTEND_NAME }}:${{ github.sha }} \
-            -f azure-deployment/Dockerfile.frontend ./
-          
-          docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.FRONTEND_NAME }}:latest \
-            -f azure-deployment/Dockerfile.frontend ./
-
-      - name: Push Frontend image
-        run: |
+          docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.FRONTEND_NAME }}:${{ github.sha }} -f azure-deployment/Dockerfile.frontend ./
           docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.FRONTEND_NAME }}:${{ github.sha }}
-          docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.FRONTEND_NAME }}:latest
 
-      # ==========================================
-      # BUILD ADMIN IMAGE
-      # ==========================================
-      - name: Build Admin image
+      - name: Build and push Admin image
         run: |
-          docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.ADMIN_NAME }}:${{ github.sha }} \
-            -f azure-deployment/Dockerfile.admin ./admin-panel
-          
-          docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.ADMIN_NAME }}:latest \
-            -f azure-deployment/Dockerfile.admin ./admin-panel
-
-      - name: Push Admin image
-        run: |
+          docker build -t ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.ADMIN_NAME }}:${{ github.sha }} -f azure-deployment/Dockerfile.admin ./admin-panel
           docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.ADMIN_NAME }}:${{ github.sha }}
-          docker push ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.ADMIN_NAME }}:latest
 
-      # ==========================================
-      # DEPLOY BACKEND
-      # ==========================================
-      - name: Deploy Backend to Azure Container Apps
+      - name: Deploy Backend
         run: |
           az containerapp update \
             --name ${{ env.BACKEND_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --image ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.BACKEND_NAME }}:${{ github.sha }} \
-            --cpu 0.5 --memory 1Gi \
-            --min-replicas 1 --max-replicas 3 \
-            --env-vars "NODE_ENV=production" "MONGODB_URI=${{ secrets.MONGODB_URI }}" "REDIS_URL=${{ secrets.REDIS_URL }}" "JWT_SECRET=${{ secrets.JWT_SECRET }}"
+            --set-env-vars NODE_ENV=production MONGODB_URI="${{ secrets.MONGODB_URI }}" REDIS_URL="${{ secrets.REDIS_URL }}" JWT_SECRET="${{ secrets.JWT_SECRET }}"
 
-      # ==========================================
-      # DEPLOY FRONTEND
-      # ==========================================
-      - name: Deploy Frontend to Azure Container Apps
+      - name: Deploy Frontend
         run: |
           az containerapp update \
             --name ${{ env.FRONTEND_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --image ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.FRONTEND_NAME }}:${{ github.sha }} \
-            --cpu 0.25 --memory 0.5Gi \
-            --min-replicas 1 --max-replicas 3 \
-            --env-vars "REACT_APP_API_URL=${{ secrets.FRONTEND_API_URL }}"
+            --set-env-vars REACT_APP_API_URL="${{ secrets.FRONTEND_API_URL }}"
 
-      # ==========================================
-      # DEPLOY ADMIN
-      # ==========================================
-      - name: Deploy Admin to Azure Container Apps
+      - name: Deploy Admin
         run: |
           az containerapp update \
             --name ${{ env.ADMIN_NAME }} \
             --resource-group ${{ env.RESOURCE_GROUP }} \
             --image ${{ env.REGISTRY_NAME }}.azurecr.io/${{ env.ADMIN_NAME }}:${{ github.sha }} \
-            --cpu 0.25 --memory 0.5Gi \
-            --min-replicas 1 --max-replicas 2 \
-            --env-vars "REACT_APP_API_URL=${{ secrets.FRONTEND_API_URL }}"
+            --set-env-vars REACT_APP_API_URL="${{ secrets.FRONTEND_API_URL }}"
 
-      # ==========================================
-      # VERIFY DEPLOYMENT
-      # ==========================================
-      - name: Verify Backend deployment
-        run: |
-          echo "Waiting for backend to be ready..."
-          sleep 30
-          BACKEND_URL="https://$(az containerapp show --name ${{ env.BACKEND_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --query properties.fqdn -o tsv)"
-          echo "Backend URL: $BACKEND_URL"
-          echo "backend_url=$BACKEND_URL" >> $GITHUB_OUTPUT
-
-      - name: Health check
-        run: |
-          BACKEND_FQDN=$(az containerapp show --name ${{ env.BACKEND_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --query properties.fqdn -o tsv)
-          echo "Testing health endpoint..."
-          curl -f "https://$BACKEND_FQDN/api/health" || echo "Health check may need more time"
-
-      # ==========================================
-      # DEPLOYMENT COMPLETE
-      # ==========================================
       - name: Deployment complete
         run: |
           BACKEND_FQDN=$(az containerapp show --name ${{ env.BACKEND_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --query properties.fqdn -o tsv)
           FRONTEND_FQDN=$(az containerapp show --name ${{ env.FRONTEND_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --query properties.fqdn -o tsv)
           ADMIN_FQDN=$(az containerapp show --name ${{ env.ADMIN_NAME }} --resource-group ${{ env.RESOURCE_GROUP }} --query properties.fqdn -o tsv)
-          
-          echo "========================================="
-          echo "🎉 Deployment Complete!"
-          echo "========================================="
+
           echo "Frontend: https://$FRONTEND_FQDN"
           echo "Admin Panel: https://$ADMIN_FQDN"
           echo "Backend API: https://$BACKEND_FQDN/api"
-          echo "========================================="
